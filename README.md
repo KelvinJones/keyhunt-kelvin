@@ -71,7 +71,7 @@ This version is intended for Linux. If you are on Windows, use WSL.
 
 	```
 	git clone https://github.com/KelvinJones/keyhunt-kelvin.git
-	cd keyhunt
+	cd keyhunt-kelvin
 	```
 
 3. Build the current version.
