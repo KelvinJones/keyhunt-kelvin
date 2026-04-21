@@ -167,6 +167,8 @@ void writekey(bool compressed,Int *key);
 void writekeyeth(Int *key);
 
 void checkpointer(void *ptr,const char *file,const char *function,const  char *name,int line);
+bool isInSearchRange(Int *key);
+void setRandomBaseKey(Int *key);
 
 bool isBase58(char c);
 bool isValidBase58String(char *str);
@@ -2568,7 +2570,7 @@ void *thread_process(void *vargp)	{
 
 	do {
 		if(FLAGRANDOM){
-			key_mpz.Rand(&n_range_start,&n_range_end);
+			setRandomBaseKey(&key_mpz);
 		}
 		else	{
 			if(n_range_start.IsLower(&n_range_end))	{
@@ -3172,7 +3174,7 @@ void *thread_process_vanity(void *vargp)	{
 
 	do {
 		if(FLAGRANDOM){
-			key_mpz.Rand(&n_range_start,&n_range_end);
+			setRandomBaseKey(&key_mpz);
 		}
 		else	{
 			if(n_range_start.IsLower(&n_range_end))	{
@@ -4193,8 +4195,15 @@ void *thread_process_bsgs_random(void *vargp)	{
 #else
 		pthread_mutex_lock(&bsgs_thread);
 #endif
-
-		base_key.Rand(&n_range_start,&n_range_end);
+		if(n_range_diff.IsLowerOrEqual(&BSGS_N_double)) {
+			base_key.Set(&n_range_start);
+		}
+		else {
+			n_range_random.Set(&n_range_end);
+			n_range_random.Sub(&BSGS_N_double);
+			/* Keep random BSGS windows inside the requested range when possible. */
+			base_key.Rand(&n_range_start,&n_range_random);
+		}
 #if defined(_WIN64) && !defined(__CYGWIN__)
 		ReleaseMutex(bsgs_thread);
 #else
@@ -4462,7 +4471,7 @@ int bsgs_thirdcheck(Int *start_range,uint32_t a,uint32_t k_index,Int *privatekey
 				privatekey->Add((uint64_t)(j+1));
 				privatekey->Add(&base_key);
 				point_aux = secp->ComputePublicKey(privatekey);
-				if(point_aux.x.IsEqual(&OriginalPointsBSGS[k_index].x))	{
+				if(point_aux.x.IsEqual(&OriginalPointsBSGS[k_index].x) && isInSearchRange(privatekey))	{
 					found = 1;
 				}
 				else	{
@@ -4471,7 +4480,7 @@ int bsgs_thirdcheck(Int *start_range,uint32_t a,uint32_t k_index,Int *privatekey
 					privatekey->Sub((uint64_t)(j+1));
 					privatekey->Add(&base_key);
 					point_aux = secp->ComputePublicKey(privatekey);
-					if(point_aux.x.IsEqual(&OriginalPointsBSGS[k_index].x))	{
+					if(point_aux.x.IsEqual(&OriginalPointsBSGS[k_index].x) && isInSearchRange(privatekey))	{
 						found = 1;
 					}
 				}
@@ -4487,7 +4496,7 @@ int bsgs_thirdcheck(Int *start_range,uint32_t a,uint32_t k_index,Int *privatekey
 				calcualteindex(i,&calculatedkey);
 				privatekey->Set(&calculatedkey);
 				privatekey->Add(&base_key);
-				found = 1;
+				found = isInSearchRange(privatekey);
 			}
 		}
 		i++;
@@ -6058,6 +6067,9 @@ void writevanitykey(bool compressed,Int *key)	{
 	Point publickey;
 	FILE *keys;
 	char *hextemp,*hexrmd,public_key_hex[131],address[50],rmdhash[20];
+	if(!isInSearchRange(key)) {
+		return;
+	}
 	hextemp = key->GetBase16();
 	publickey = secp->ComputePublicKey(key);
 	secp->GetPublicKeyHex(compressed,publickey,public_key_hex);
@@ -6240,10 +6252,45 @@ void checkpointer(void *ptr,const char *file,const char *function,const  char *n
 	}
 }
 
+bool isInSearchRange(Int *key) {
+	if(FLAGRANGE || FLAGBITRANGE) {
+		return !key->IsLower(&n_range_start) && !key->IsGreater(&n_range_end);
+	}
+	return true;
+}
+
+void setRandomBaseKey(Int *key) {
+	Int n_range_random;
+	Int n_range_span;
+
+	if((FLAGRANGE || FLAGBITRANGE) == 0 || N_SEQUENTIAL_MAX <= 1) {
+		key->Rand(&n_range_start,&n_range_end);
+		return;
+	}
+
+	n_range_span.SetInt64(N_SEQUENTIAL_MAX - 1);
+	if(n_range_diff.IsLowerOrEqual(&n_range_span)) {
+		key->Set(&n_range_start);
+		return;
+	}
+
+	n_range_random.Set(&n_range_end);
+	n_range_random.Sub(N_SEQUENTIAL_MAX - 1);
+	if(n_range_random.IsLowerOrEqual(&n_range_start)) {
+		key->Set(&n_range_start);
+	}
+	else {
+		key->Rand(&n_range_start,&n_range_random);
+	}
+}
+
 void writekey(bool compressed,Int *key)	{
 	Point publickey;
 	FILE *keys;
 	char *hextemp,*hexrmd,public_key_hex[132],address[50],rmdhash[20];
+	if(!isInSearchRange(key)) {
+		return;
+	}
 	memset(address,0,50);
 	memset(public_key_hex,0,132);
 	hextemp = key->GetBase16();
@@ -6278,6 +6325,9 @@ void writekeyeth(Int *key)	{
 	Point publickey;
 	FILE *keys;
 	char *hextemp,address[43],hash[20];
+	if(!isInSearchRange(key)) {
+		return;
+	}
 	hextemp = key->GetBase16();
 	publickey = secp->ComputePublicKey(key);
 	generate_binaddress_eth(publickey,(unsigned char*)hash);

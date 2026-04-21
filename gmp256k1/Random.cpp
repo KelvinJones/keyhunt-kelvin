@@ -62,6 +62,7 @@ void Int::Rand(Int *min,Int *max)	{
 	}
 	Int diff(max);
 	diff.Sub(min);
+	diff.AddOne();
 	this->Rand(256);
 	this->Mod(&diff);
 	this->Add(min);

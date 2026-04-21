@@ -753,6 +753,7 @@ void Int::Rand(Int *min,Int *max) {
   uint32_t nb = nbit/32;
   diff.Set(max);
   diff.Sub(min);
+	diff.AddOne();
 	uint32_t i=0;
 	for(;i<nb;i++)
 		bits[i]=rndl();

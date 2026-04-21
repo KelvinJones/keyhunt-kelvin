@@ -136,7 +136,7 @@ public:
 		Rand functions are
 	*/
 	void Rand(int nbit);						// return a rand number bewteen [ 2^(nbit-1) and 2^nbit
-	void Rand(Int *min,Int *max);				// return a rand number bewteen [min and max)
+	void Rand(Int *min,Int *max);				// return a rand number bewteen [min and max]
 
 	static void SetupField(Int *n);
 	
