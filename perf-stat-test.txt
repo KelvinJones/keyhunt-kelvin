@@ -1,0 +1,26 @@
+# started on Fri Jan  9 16:21:19 2026
+
+
+ Performance counter stats for './keyhunt -m address -f tests/1to32.txt -t 1':
+
+          61567.64 msec task-clock:u              #    1.025 CPUs utilized          
+                 0      context-switches:u        #    0.000 /sec                   
+                 0      cpu-migrations:u          #    0.000 /sec                   
+               500      page-faults:u             #    8.121 /sec                   
+      250977330399      cycles:u                  #    4.076 GHz                      (85.70%)
+        4841152962      stalled-cycles-frontend:u #    1.93% frontend cycles idle     (85.71%)
+      660739131528      instructions:u            #    2.63  insn per cycle         
+                                                  #    0.01  stalled cycles per insn  (85.71%)
+       13499895318      branches:u                #  219.269 M/sec                    (85.72%)
+         240352903      branch-misses:u           #    1.78% of all branches          (85.72%)
+      154453551973      L1-dcache-loads:u         #    2.509 G/sec                    (85.72%)
+         980204492      L1-dcache-load-misses:u   #    0.63% of all L1-dcache accesses  (85.72%)
+   <not supported>      LLC-loads:u                                                 
+   <not supported>      LLC-load-misses:u                                           
+
+      60.047701836 seconds time elapsed
+
+      61.545490000 seconds user
+       0.020504000 seconds sys
+
+

@@ -195,6 +195,7 @@ DWORD WINAPI thread_process_bsgs_backward(LPVOID vargp);
 DWORD WINAPI thread_process_bsgs_both(LPVOID vargp);
 DWORD WINAPI thread_process_bsgs_random(LPVOID vargp);
 DWORD WINAPI thread_process_bsgs_dance(LPVOID vargp);
+DWORD WINAPI thread_process_bsgs_jump(LPVOID vargp);
 DWORD WINAPI thread_bPload(LPVOID vargp);
 DWORD WINAPI thread_bPload_2blooms(LPVOID vargp);
 #else
@@ -206,6 +207,7 @@ void *thread_process_bsgs_backward(void *vargp);
 void *thread_process_bsgs_both(void *vargp);
 void *thread_process_bsgs_random(void *vargp);
 void *thread_process_bsgs_dance(void *vargp);
+void *thread_process_bsgs_jump(void *vargp);
 void *thread_bPload(void *vargp);
 void *thread_bPload_2blooms(void *vargp);
 #endif
@@ -224,7 +226,7 @@ int THREADOUTPUT = 0;
 char *bit_range_str_min;
 char *bit_range_str_max;
 
-const char *bsgs_modes[5] = {"sequential","backward","both","random","dance"};
+const char *bsgs_modes[6] = {"sequential","backward","both","random","dance","jump"};
 const char *modes[7] = {"xpoint","address","bsgs","rmd160","pub2rmd","minikeys","vanity"};
 const char *cryptos[3] = {"btc","eth","all"};
 const char *publicsearch[3] = {"uncompress","compress","both"};
@@ -281,6 +283,8 @@ int FLAGBLOOMMULTIPLIER = 1;
 int FLAGVANITY = 0;
 int FLAGBASEMINIKEY = 0;
 int FLAGBSGSMODE = 0;
+int FLAGBSGSJUMP = 0;
+int BSGS_JUMP_SECONDS = 60;
 int FLAGDEBUG = 0;
 int FLAGQUIET = 0;
 int FLAGMATRIX = 0;
@@ -486,7 +490,7 @@ int main(int argc, char **argv)	{
 	
 	printf("[+] Version %s, developed by AlbertoBSD\n",version);
 
-	while ((c = getopt(argc, argv, "deh6MqRSB:b:c:C:E:f:I:k:l:m:N:n:p:r:s:t:v:G:8:z:")) != -1) {
+	while ((c = getopt(argc, argv, "deh6MqRSB:b:c:C:E:f:I:J:k:l:m:N:n:p:r:s:t:v:G:8:z:")) != -1) {
 		switch(c) {
 			case 'h':
 				menu();
@@ -496,14 +500,25 @@ int main(int argc, char **argv)	{
 				fprintf(stderr,"[W] Skipping checksums on files\n");
 			break;
 			case 'B':
-				index_value = indexOf(optarg,bsgs_modes,5);
-				if(index_value >= 0 && index_value <= 4)	{
+				index_value = indexOf(optarg,bsgs_modes,6);
+				if(index_value >= 0 && index_value <= 5)	{
 					FLAGBSGSMODE = index_value;
+					if(FLAGBSGSMODE == 5)	{
+						FLAGBSGSJUMP = 1;
+					}
 					//printf("[+] BSGS mode %s\n",optarg);
 				}
 				else	{
 					fprintf(stderr,"[W] Ignoring unknow bsgs mode %s\n",optarg);
 				}
+			break;
+			case 'J':
+				BSGS_JUMP_SECONDS = (int)strtol(optarg,NULL,10);
+				if(BSGS_JUMP_SECONDS <= 0)	{
+					fprintf(stderr,"[W] Invalid -J value %s, using 60\n",optarg);
+					BSGS_JUMP_SECONDS = 60;
+				}
+				printf("[+] BSGS jump interval %d seconds\n",BSGS_JUMP_SECONDS);
 			break;
 			case 'b':
 				bitrange = strtol(optarg,NULL,10);
@@ -803,6 +818,10 @@ int main(int argc, char **argv)	{
 	init_generator();
 	if(FLAGMODE == MODE_BSGS )	{
 		printf("[+] Mode BSGS %s\n",bsgs_modes[FLAGBSGSMODE]);
+		if(FLAGBSGSMODE == 5)	{
+			FLAGBSGSJUMP = 1;
+			printf("[+] BSGS jump: sequential from random points every %d seconds\n",BSGS_JUMP_SECONDS);
+		}
 	}
 	
 	if(FLAGFILE == 0) {
@@ -1110,7 +1129,18 @@ int main(int argc, char **argv)	{
 			n_range_diff.Rand(&n_range_start,&n_range_end);
 			n_range_start.Set(&n_range_diff);
 		}
-		BSGS_CURRENT.Set(&n_range_start);
+		if(FLAGBSGSMODE == 5)	{
+			/* jump mode: start at a random point inside the range */
+			BSGS_CURRENT.Rand(&n_range_start,&n_range_end);
+			{
+				char *jump_hex = BSGS_CURRENT.GetBase16();
+				printf("[+] BSGS jump start 0x%s\n",jump_hex);
+				free(jump_hex);
+			}
+		}
+		else	{
+			BSGS_CURRENT.Set(&n_range_start);
+		}
 
 
 		if(n_range_diff.IsLower(&BSGS_N) )	{
@@ -2061,6 +2091,9 @@ int main(int argc, char **argv)	{
 				case 4:
 					tid[j] = CreateThread(NULL, 0, thread_process_bsgs_dance, (void*)tt, 0, &s);
 					break;
+				case 5:
+					tid[j] = CreateThread(NULL, 0, thread_process_bsgs_jump, (void*)tt, 0, &s);
+					break;
 				}
 #else
 				case 0:
@@ -2077,6 +2110,9 @@ int main(int argc, char **argv)	{
 				break;
 				case 4:
 					s = pthread_create(&tid[j],NULL,thread_process_bsgs_dance,(void *)tt);
+				break;
+				case 5:
+					s = pthread_create(&tid[j],NULL,thread_process_bsgs_jump,(void *)tt);
 				break;
 #endif
 			}
@@ -2154,6 +2190,32 @@ int main(int argc, char **argv)	{
 	do	{
 		sleep_ms(1000);
 		seconds.AddOne();
+		/* Periodic random jump for BSGS jump mode */
+		if(FLAGMODE == MODE_BSGS && FLAGBSGSMODE == 5 && BSGS_JUMP_SECONDS > 0)	{
+			MPZAUX.Set(&seconds);
+			Int jump_int;
+			jump_int.SetInt32(BSGS_JUMP_SECONDS);
+			MPZAUX.Mod(&jump_int);
+			if(MPZAUX.IsZero())	{
+#if defined(_WIN64) && !defined(__CYGWIN__)
+				WaitForSingleObject(bsgs_thread, INFINITE);
+#else
+				pthread_mutex_lock(&bsgs_thread);
+#endif
+				BSGS_CURRENT.Rand(&n_range_start,&n_range_end);
+				{
+					char *jump_hex = BSGS_CURRENT.GetBase16();
+					printf("\n[+] BSGS jump to 0x%s\n",jump_hex);
+					fflush(stdout);
+					free(jump_hex);
+				}
+#if defined(_WIN64) && !defined(__CYGWIN__)
+				ReleaseMutex(bsgs_thread);
+#else
+				pthread_mutex_unlock(&bsgs_thread);
+#endif
+			}
+		}
 		check_flag = 1;
 		for(j = 0; j <NTHREADS && check_flag; j++) {
 			check_flag &= ends[j];
@@ -4008,6 +4070,202 @@ pn.y.ModAdd(&GSn[i].y);
 	return NULL;
 }
 
+
+#if defined(_WIN64) && !defined(__CYGWIN__)
+DWORD WINAPI thread_process_bsgs_jump(LPVOID vargp) {
+#else
+void *thread_process_bsgs_jump(void *vargp)	{
+#endif
+	/*
+		BSGS jump mode: same hot path as sequential (fastest), but:
+		- starts from BSGS_CURRENT (set randomly at init / by main timer)
+		- when the cursor passes n_range_end, pick a new random point and continue
+		- main thread also reseeds BSGS_CURRENT every BSGS_JUMP_SECONDS
+	*/
+	FILE* filekey;
+	struct tothread* tt;
+	char xpoint_raw[32], *aux_c, *hextemp;
+	Int base_key, keyfound;
+	IntGroup* grp = new IntGroup(CPU_GRP_SIZE / 2 + 1);
+	Int dx[CPU_GRP_SIZE / 2 + 1];
+	Int dy, dyn, _s, _p, km, intaux;
+	Point base_point, point_aux, point_found;
+	Point startP;
+	Point pp, pn;
+	Point pts[CPU_GRP_SIZE];
+	uint32_t k, l, r, salir, thread_number, cycles;
+	int hLength = (CPU_GRP_SIZE / 2 - 1);
+	grp->Set(dx);
+
+	tt = (struct tothread *)vargp;
+	thread_number = tt->nt;
+	free(tt);
+
+	cycles = bsgs_aux / 1024;
+	if(bsgs_aux % 1024 != 0)	{
+		cycles++;
+	}
+
+	intaux.Set(&BSGS_M_double);
+	intaux.Mult(CPU_GRP_SIZE/2);
+	intaux.Add(&BSGS_M);
+
+	do	{
+#if defined(_WIN64) && !defined(__CYGWIN__)
+		WaitForSingleObject(bsgs_thread, INFINITE);
+#else
+		pthread_mutex_lock(&bsgs_thread);
+#endif
+		/* If sequential cursor left the range, jump to a new random origin */
+		if(BSGS_CURRENT.IsGreaterOrEqual(&n_range_end))	{
+			BSGS_CURRENT.Rand(&n_range_start,&n_range_end);
+			if(FLAGQUIET == 0)	{
+				aux_c = BSGS_CURRENT.GetBase16();
+				printf("\n[+] BSGS jump (EOF) to 0x%s\n",aux_c);
+				fflush(stdout);
+				free(aux_c);
+			}
+		}
+		base_key.Set(&BSGS_CURRENT);
+		BSGS_CURRENT.Add(&BSGS_N_double);
+#if defined(_WIN64) && !defined(__CYGWIN__)
+		ReleaseMutex(bsgs_thread);
+#else
+		pthread_mutex_unlock(&bsgs_thread);
+#endif
+
+		/* Never permanently exit in jump mode; continue after re-seed above */
+		if(base_key.IsGreaterOrEqual(&n_range_end))
+			continue;
+
+		if(FLAGMATRIX)	{
+			aux_c = base_key.GetBase16();
+			printf("[+] Thread 0x%s \n",aux_c);
+			fflush(stdout);
+			free(aux_c);
+		}
+		else	{
+			if(FLAGQUIET == 0){
+				aux_c = base_key.GetBase16();
+				printf("\r[+] Thread 0x%s   \r",aux_c);
+				fflush(stdout);
+				free(aux_c);
+				THREADOUTPUT = 1;
+			}
+		}
+		base_point = secp->ComputePublicKey(&base_key);
+		km.Set(&base_key);
+		km.Neg();
+		km.Add(&secp->order);
+		km.Sub(&intaux);
+		point_aux = secp->ComputePublicKey(&km);
+		for(k = 0; k < bsgs_point_number ; k++)	{
+			if(bsgs_found[k] == 0)	{
+				startP  = secp->AddDirect(OriginalPointsBSGS[k],point_aux);
+				uint32_t j = 0;
+				while( j < cycles && bsgs_found[k]== 0 )	{
+					int i;
+					for(i = 0; i < hLength; i++) {
+						dx[i].ModSub(&GSn[i].x,&startP.x);
+					}
+					dx[i].ModSub(&GSn[i].x,&startP.x);
+					dx[i+1].ModSub(&_2GSn.x,&startP.x);
+					grp->ModInv();
+					pts[CPU_GRP_SIZE / 2] = startP;
+					for(i = 0; i<hLength; i++) {
+						pp = startP;
+						pn = startP;
+
+						dy.ModSub(&GSn[i].y,&pp.y);
+						_s.ModMulK1(&dy,&dx[i]);
+						_p.ModSquareK1(&_s);
+						pp.x.ModNeg();
+						pp.x.ModAdd(&_p);
+						pp.x.ModSub(&GSn[i].x);
+
+						dyn.Set(&GSn[i].y);
+						dyn.ModNeg();
+						dyn.ModSub(&pn.y);
+						_s.ModMulK1(&dyn,&dx[i]);
+						_p.ModSquareK1(&_s);
+						pn.x.ModNeg();
+						pn.x.ModAdd(&_p);
+						pn.x.ModSub(&GSn[i].x);
+
+						pts[CPU_GRP_SIZE / 2 + (i + 1)] = pp;
+						pts[CPU_GRP_SIZE / 2 - (i + 1)] = pn;
+					}
+					pn = startP;
+					dyn.Set(&GSn[i].y);
+					dyn.ModNeg();
+					dyn.ModSub(&pn.y);
+					_s.ModMulK1(&dyn,&dx[i]);
+					_p.ModSquareK1(&_s);
+					pn.x.ModNeg();
+					pn.x.ModAdd(&_p);
+					pn.x.ModSub(&GSn[i].x);
+					pts[0] = pn;
+					for(int i = 0; i<CPU_GRP_SIZE && bsgs_found[k]== 0; i++) {
+						pts[i].x.Get32Bytes((unsigned char*)xpoint_raw);
+						r = bloom_check(&bloom_bP[((unsigned char)xpoint_raw[0])],xpoint_raw,32);
+						if(r) {
+							r = bsgs_secondcheck(&base_key,((j*1024) + i),k,&keyfound);
+							if(r)	{
+								hextemp = keyfound.GetBase16();
+								printf("[+] Thread Key found privkey %s   \n",hextemp);
+								point_found = secp->ComputePublicKey(&keyfound);
+								aux_c = secp->GetPublicKeyHex(OriginalPointsBSGScompressed[k],point_found);
+								printf("[+] Publickey %s\n",aux_c);
+#if defined(_WIN64) && !defined(__CYGWIN__)
+								WaitForSingleObject(write_keys, INFINITE);
+#else
+								pthread_mutex_lock(&write_keys);
+#endif
+								filekey = fopen("KEYFOUNDKEYFOUND.txt","a");
+								if(filekey != NULL)	{
+									fprintf(filekey,"Key found privkey %s\nPublickey %s\n",hextemp,aux_c);
+									fclose(filekey);
+								}
+								free(hextemp);
+								free(aux_c);
+#if defined(_WIN64) && !defined(__CYGWIN__)
+								ReleaseMutex(write_keys);
+#else
+								pthread_mutex_unlock(&write_keys);
+#endif
+								bsgs_found[k] = 1;
+								salir = 1;
+								for(l = 0; l < bsgs_point_number && salir; l++)	{
+									salir &= bsgs_found[l];
+								}
+								if(salir)	{
+									printf("All points were found\n");
+									exit(EXIT_FAILURE);
+								}
+							}
+						}
+					}
+					pp = startP;
+					dy.ModSub(&_2GSn.y,&pp.y);
+					_s.ModMulK1(&dy,&dx[i + 1]);
+					_p.ModSquareK1(&_s);
+					pp.x.ModNeg();
+					pp.x.ModAdd(&_p);
+					pp.x.ModSub(&_2GSn.x);
+					pp.y.ModSub(&_2GSn.x,&pp.x);
+					pp.y.ModMulK1(&_s);
+					pp.y.ModSub(&_2GSn.y);
+					startP = pp;
+					j++;
+				}
+			}
+		}
+		steps[thread_number]+=2;
+	}while(1);
+	ends[thread_number] = 1;
+	return NULL;
+}
+
 #if defined(_WIN64) && !defined(__CYGWIN__)
 DWORD WINAPI thread_process_bsgs_random(LPVOID vargp) {
 #else
@@ -5741,7 +5999,8 @@ void sha256sse_23(uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, ui
 void menu() {
 	printf("\nUsage:\n");
 	printf("-h          show this help\n");
-	printf("-B Mode     BSGS now have some modes <sequential, backward, both, random, dance>\n");
+	printf("-B Mode     BSGS modes <sequential, backward, both, random, dance, jump>\n");
+	printf("-J seconds  Jump interval for BSGS -B jump (default 60). Sequential from random points\n");
 	printf("-b bits     For some puzzles you only need some numbers of bits in the test keys.\n");
 	printf("-c crypto   Search for specific crypto. <btc, eth> valid only w/ -m address\n");
 	printf("-C mini     Set the minikey Base only 22 character minikeys, ex: SRPqx8QiwnW4WNWnTVa2W5\n");

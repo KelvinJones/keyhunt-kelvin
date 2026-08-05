@@ -1,0 +1,40 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 47K of event 'cycles:u'
+# Event count (approx.): 1956954042668
+#
+# Overhead  Symbol                           IPC   [IPC Coverage]
+# ........  ...............................  ....................
+#
+    51.30%  [.] _sha256sse::Transform        -      -            
+    19.37%  [.] ripemd160sse_32              -      -            
+     3.90%  [.] XXH64_finalize               -      -            
+     3.89%  [.] Int::ModMulK1                -      -            
+     2.91%  [.] Int::ModMulK1                -      -            
+     2.35%  [.] Int::ModSquareK1             -      -            
+     1.92%  [.] bloom_check                  -      -            
+     1.55%  [.] Int::Neg                     -      -            
+     1.39%  [.] Secp256K1::GetHash160        -      -            
+     1.32%  [.] thread_process               -      -            
+     0.94%  [.] Int::IsNegative              -      -            
+     0.86%  [.] Int::Add                     -      -            
+     0.85%  [.] XXH64                        -      -            
+     0.85%  [.] Secp256K1::GetHash160_fromX  -      -            
+     0.83%  [.] Int::Sub                     -      -            
+     0.75%  [.] Int::Mult                    -      -            
+     0.67%  [.] Int::ModInv                  -      -            
+     0.62%  [.] Int::ModSub                  -      -            
+     0.54%  [.] Int::Sub                     -      -            
+     0.53%  [.] Int::Set                     -      -            
+     0.50%  [.] sha256sse_1B                 -      -            
+     0.50%  [.] Int::ModAdd                  -      -            
+     0.46%  [.] Int::ModSub                  -      -            
+     0.36%  [.] Int::IsPositive              -      -            
+     0.28%  [.] sha256sse_2B                 -      -            
+     0.17%  [.] Int::IMult                   -      -            
+     0.09%  [.] IntGroup::ModInv             -      -            
+     0.08%  [.] Int::Int                     -      -            
+     0.07%  [.] Int::ModNeg                  -      -            
